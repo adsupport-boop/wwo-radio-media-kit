@@ -1,0 +1,107 @@
+name: Make store assets
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install tools
+        run: |
+          npm init -y >/dev/null
+          npm i playwright@1.48.2
+          npx playwright install --with-deps chromium
+          pip install pillow
+      - name: Screenshots and logo
+        run: |
+          mkdir -p assets
+          cat > shot.js <<'JS'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+          const BAD = /advert|sexy|commercial|sponsor|ad break|promo/i;
+          (async () => {
+            const b = await chromium.launch();
+            const p = await b.newPage({ viewport: { width: 1920, height: 1080 } });
+            const url = 'https://wwo-radio-tv.netlify.app/?platform=firetv';
+            let title = '';
+            for (let i = 0; i < 35; i++) {
+              await p.goto(url, { waitUntil: 'networkidle', timeout: 60000 }).catch(e => console.log(e.message));
+              await p.waitForTimeout(4000);
+              const lines = (await p.evaluate(() => document.body.innerText)).split('\n');
+              const k = lines.findIndex(l => /NOW PLAYING/i.test(l));
+              title = (lines[k + 1] || '') + ' / ' + (lines[k + 2] || '');
+              console.log('Attempt ' + (i + 1) + ': ' + title);
+              if (k >= 0 && !BAD.test(title)) break;
+              await p.waitForTimeout(56000);
+            }
+            fs.writeFileSync('assets/now-playing.txt', title + '\n');
+            await p.screenshot({ path: 'assets/screenshot-1-1920x1080.jpg', type: 'jpeg', quality: 90 });
+            await p.keyboard.press('ArrowDown'); await p.waitForTimeout(1500);
+            await p.screenshot({ path: 'assets/screenshot-2-1920x1080.jpg', type: 'jpeg', quality: 90 });
+            await p.keyboard.press('ArrowRight'); await p.waitForTimeout(1500);
+            await p.screenshot({ path: 'assets/screenshot-3-1920x1080.jpg', type: 'jpeg', quality: 90 });
+            await p.goto(url, { waitUntil: 'networkidle', timeout: 60000 }).catch(() => {});
+            const imgs = await p.evaluate(() => [...document.images].map(i => ({ src: i.currentSrc || i.src, w: i.naturalWidth, h: i.naturalHeight })));
+            const logos = imgs.filter(i => /logo/i.test(i.src)).sort((a, c) => c.w * c.h - a.w * a.h);
+            console.log('Logo candidates: ' + JSON.stringify(logos));
+            if (logos.length) {
+              const r = await p.request.get(logos[0].src);
+              fs.writeFileSync('logo-src', await r.body());
+            }
+            await b.close();
+          })();
+          JS
+          node shot.js
+      - name: Icons and Fire TV art
+        run: |
+          cat > art.py <<'PY'
+          from PIL import Image, ImageDraw, ImageFont, ImageFilter
+          import math
+          lg = Image.open('logo-src').convert('RGBA')
+          s = min(lg.size); l = (lg.width - s) // 2; t = (lg.height - s) // 2
+          lg = lg.crop((l, t, l + s, t + s))
+          if lg.getpixel((2, 2))[3] > 200:
+              m = Image.new('L', lg.size, 0)
+              ImageDraw.Draw(m).ellipse((s * 0.01, s * 0.01, s * 0.99, s * 0.99), fill=255)
+              lg.putalpha(m.filter(ImageFilter.GaussianBlur(2)))
+          lg.resize((512, 512), Image.LANCZOS).save('assets/tablet-icon-512x512.png')
+          lg.resize((114, 114), Image.LANCZOS).save('assets/tablet-icon-114x114.png')
+          def bg(W, H, cx):
+              im = Image.new('RGB', (W, H)); px = im.load(); r = math.hypot(W, H) * 0.6
+              for y in range(H):
+                  for x in range(W):
+                      k = min(1, math.hypot(x - cx * W, y - H / 2) / r)
+                      px[x, y] = (int(18 + (5 - 18) * k), int(52 + (11 - 52) * k), int(120 + (26 - 120) * k))
+              return im
+          fb = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+          fr = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+          W, H = 1280, 720
+          im = bg(W, H, 0.3); d = ImageDraw.Draw(im)
+          ls = int(H * 0.82); lx = int(W * 0.05)
+          im.paste(lg.resize((ls, ls), Image.LANCZOS), (lx, (H - ls) // 2), lg.resize((ls, ls), Image.LANCZOS))
+          x = lx + ls + int(W * 0.04); avail = W - x - int(W * 0.04); sz = 200
+          while ImageFont.truetype(fb, sz).getlength('WWO RADIO') > avail: sz -= 2
+          d.text((x, H // 2 - sz), 'WWO RADIO', font=ImageFont.truetype(fb, sz), fill='white')
+          d.text((x, H // 2 + int(sz * 0.25)), 'LIVE 24/7 · CHICAGO', font=ImageFont.truetype(fr, int(sz * 0.42)), fill=(201, 209, 227))
+          im.save('assets/firetv-app-icon-1280x720.png')
+          W, H = 1920, 1080
+          im = bg(W, H, 0.5); ls = 620
+          im.paste(lg.resize((ls, ls), Image.LANCZOS), ((W - ls) // 2, (H - ls) // 2 - 40), lg.resize((ls, ls), Image.LANCZOS))
+          im.save('assets/firetv-background-1920x1080.jpg', quality=90)
+          for f in ['tablet-icon-512x512.png', 'tablet-icon-114x114.png', 'firetv-app-icon-1280x720.png', 'firetv-background-1920x1080.jpg', 'screenshot-1-1920x1080.jpg', 'screenshot-2-1920x1080.jpg', 'screenshot-3-1920x1080.jpg']:
+              i = Image.open('assets/' + f); print(f, i.size, i.mode)
+          PY
+          python3 art.py
+      - name: Save to repo
+        run: |
+          git config user.name "WWO Radio bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add assets
+          git commit -m "Store assets for Amazon Appstore"
+          git push
