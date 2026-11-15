@@ -75,9 +75,8 @@ jobs:
           xcodebuild -project WWORadioTV.xcodeproj -scheme WWORadioTV -sdk appletvos -configuration Release \
             -archivePath build/WWORadioTV.xcarchive archive \
             DEVELOPMENT_TEAM=$TEAM_ID CURRENT_PROJECT_VERSION=${{ github.run_number }} \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath ~/private_keys/AuthKey_$ASC_KEY_ID.p8 \
-            -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID | tail -40
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" > archive.log 2>&1 || { tail -60 archive.log; exit 1; }
+          tail -5 archive.log
       - name: Upload to App Store Connect
         run: |
           cd appletv
