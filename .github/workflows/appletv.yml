@@ -51,9 +51,9 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 60
     env:
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      ASC_KEY_ID: 2PDL2SLH62
+      ASC_ISSUER_ID: f9dc55b5-de9b-438d-a519-4140ef7df4f6
+      TEAM_ID: QY669LF7P8
     steps:
       - uses: actions/checkout@v4
       - name: Pick newest Xcode
