@@ -1,0 +1,85 @@
+name: Apple TV app
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: "Also build, sign and upload to App Store Connect"
+        type: boolean
+        default: false
+  push:
+    paths: ["appletv/**", ".github/workflows/appletv.yml"]
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pick newest Xcode
+        run: |
+          X=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1); echo "Using $X"
+          sudo xcode-select -s "$X"; xcodebuild -version
+      - name: Generate project
+        run: brew install xcodegen && cd appletv && xcodegen generate
+      - name: Build for Apple TV simulator
+        run: |
+          cd appletv
+          xcodebuild -project WWORadioTV.xcodeproj -scheme WWORadioTV -sdk appletvsimulator \
+            -configuration Debug -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -40
+      - name: Run and screenshot
+        run: |
+          cd appletv
+          RT=$(xcrun simctl list runtimes tvOS -j | python3 -c "import sys,json;r=[x for x in json.load(sys.stdin)['runtimes'] if x['isAvailable']];print(r[-1]['identifier'])")
+          DT=$(xcrun simctl list devicetypes -j | python3 -c "import sys,json;d=[x['identifier'] for x in json.load(sys.stdin)['devicetypes'] if 'Apple-TV-4K' in x['identifier']];print(d[-1])")
+          UDID=$(xcrun simctl create WWOTV "$DT" "$RT"); xcrun simctl boot $UDID; sleep 20
+          APP=$(find build -name "WWO Radio.app" -path "*simulator*" | head -1)
+          xcrun simctl install $UDID "$APP"
+          xcrun simctl launch $UDID com.westonworldone.wworadio.tv; sleep 20
+          mkdir -p ../out; xcrun simctl io $UDID screenshot ../out/appletv-home.png
+      - uses: actions/upload-artifact@v4
+        with: { name: appletv-screenshots, path: out }
+
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.upload }}
+    needs: simulator
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pick newest Xcode
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"; xcodebuild -version
+      - name: API key
+        run: |
+          mkdir -p ~/private_keys
+          echo "${{ secrets.ASC_KEY_P8 }}" > ~/private_keys/AuthKey_$ASC_KEY_ID.p8
+      - name: Generate project
+        run: brew install xcodegen && cd appletv && xcodegen generate
+      - name: Archive
+        run: |
+          cd appletv
+          xcodebuild -project WWORadioTV.xcodeproj -scheme WWORadioTV -sdk appletvos -configuration Release \
+            -archivePath build/WWORadioTV.xcarchive archive \
+            DEVELOPMENT_TEAM=$TEAM_ID CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_$ASC_KEY_ID.p8 \
+            -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID | tail -40
+      - name: Upload to App Store Connect
+        run: |
+          cd appletv
+          cat > ExportOptions.plist <<PL
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+          </dict></plist>
+          PL
+          xcodebuild -exportArchive -archivePath build/WWORadioTV.xcarchive -exportOptionsPlist ExportOptions.plist \
+            -exportPath build/export -allowProvisioningUpdates \
+            -authenticationKeyPath ~/private_keys/AuthKey_$ASC_KEY_ID.p8 \
+            -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID

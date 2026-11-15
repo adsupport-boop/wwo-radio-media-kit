@@ -1,0 +1,24 @@
+name: WWORadioTV
+options:
+  bundleIdPrefix: com.westonworldone
+  deploymentTarget:
+    tvOS: "17.0"
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+targets:
+  WWORadioTV:
+    type: application
+    platform: tvOS
+    sources: [WWORadioTV]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.westonworldone.wworadio.tv
+        PRODUCT_NAME: WWO Radio
+        ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
+        INFOPLIST_FILE: WWORadioTV/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "3"
