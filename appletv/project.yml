@@ -16,7 +16,7 @@ targets:
     sources: [WWORadioTV]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.westonworldone.wworadio.tv
+        PRODUCT_BUNDLE_IDENTIFIER: com.live365.weston
         PRODUCT_NAME: WWO Radio
         ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
         INFOPLIST_FILE: WWORadioTV/Info.plist
