@@ -63,7 +63,7 @@ jobs:
           P8: ${{ secrets.ASC_KEY_P8 }}
         run: |
           mkdir -p ~/private_keys
-          BODY=$(printf '%s' "$P8" | sed -e 's/-----BEGIN PRIVATE KEY-----//' -e 's/-----END PRIVATE KEY-----//' | tr -d ' \r\n\t')
+          BODY=$(printf '%s' "$P8" | tr -d ' \r\n\t-' | sed -e 's/BEGINPRIVATEKEY//g' -e 's/ENDPRIVATEKEY//g' | tr -cd 'A-Za-z0-9+/=')
           echo "Secret length: ${#P8}, key body length: ${#BODY}, has BEGIN line: $(printf '%s' "$P8" | grep -c 'BEGIN PRIVATE KEY')"
           { echo "-----BEGIN PRIVATE KEY-----"; printf '%s' "$BODY" | fold -w 64; echo; echo "-----END PRIVATE KEY-----"; } > ~/private_keys/AuthKey_$ASC_KEY_ID.p8
           openssl pkey -in ~/private_keys/AuthKey_$ASC_KEY_ID.p8 -noout && echo "Key file is valid"
