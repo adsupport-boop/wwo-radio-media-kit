@@ -8,6 +8,8 @@ on:
         default: false
   push:
     paths: ["appletv/**", ".github/workflows/appletv.yml"]
+permissions:
+  contents: write
 jobs:
   simulator:
     runs-on: macos-15
@@ -37,6 +39,11 @@ jobs:
           mkdir -p ../out; xcrun simctl io $UDID screenshot ../out/appletv-home.png
       - uses: actions/upload-artifact@v4
         with: { name: appletv-screenshots, path: out }
+      - name: Save screenshot to repo
+        run: |
+          mkdir -p appletv/screenshots && cp out/*.png appletv/screenshots/
+          git config user.name "github-actions" && git config user.email "actions@github.com"
+          git add appletv/screenshots && git commit -m "Apple TV screenshot [skip ci]" && git push || echo "nothing to commit"
 
   release:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.upload }}
